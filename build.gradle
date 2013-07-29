@@ -1,0 +1,27 @@
+/*
+ * Build file for Scala ResourceSync library.
+ * Copyright 2013 MIT Libraries
+ */
+
+apply plugin: 'scala'
+
+repositories {
+    mavenCentral()
+}
+
+sourceCompatibility = 1.7
+
+group = 'edu.mit.lib'
+archivesBaseName = 'resync'
+version = '0.1'
+description = 'Scala ResourceSync Library'
+
+ext {
+    developerName = "Richard Rodgers"
+    developerId = "http://orcid.org/0000-0003-1412-5595"
+}
+
+dependencies {
+    compile 'org.scala-lang:scala-library:2.10.2'
+    testCompile 'org.scalatest:scalatest_2.10:1.9.1'
+}
