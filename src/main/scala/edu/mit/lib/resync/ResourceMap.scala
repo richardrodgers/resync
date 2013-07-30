@@ -6,7 +6,6 @@
 package edu.mit.lib.resync
 
 import java.net.URL
-import java.text.{DateFormat, SimpleDateFormat}
 import java.util.Date
 
 /**

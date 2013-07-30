@@ -38,15 +38,10 @@ object XMLResourceMapWriter {
     xsw.close
   }
 
-  private def writeMetadata(metadata: Metadata, writer: XMLStreamWriter) {
-    writer.writeEmptyElement(ResourceSync.uri, "md")
-    metadata.attrs.keySet.foreach { key =>
-      writer.writeAttribute(key, metadata.attrs.get(key).get)
-    }
-  }
-
   private def writeLink(link: Link, writer: XMLStreamWriter) {
     writer.writeEmptyElement(ResourceSync.uri, "ln")
+    writer.writeAttribute("href", link.href.toString)
+    writer.writeAttribute("rel", link.rel)
     link.attrs.keySet.foreach { key =>
       writer.writeAttribute(key, link.attrs.get(key).get)
     }
@@ -72,7 +67,12 @@ object XMLResourceMapWriter {
       writer.writeCharacters(resource.priority.get.toString)
       writer.writeEndElement
     }
-    if (resource.metadata.isDefined) writeMetadata(resource.metadata.get, writer)
+    if (resource.metadata.isDefined) {
+      writer.writeEmptyElement(ResourceSync.uri, "md")
+      resource.metadata.get.keySet.foreach { key =>
+        writer.writeAttribute(key, resource.metadata.get.get(key).get)
+      }
+    }
     resource.links.foreach { link => writeLink(link, writer)}
     writer.writeEndElement
   }

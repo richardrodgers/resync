@@ -32,7 +32,7 @@ object XMLResourceMapReader {
       xsr.next match {
         case START_ELEMENT => if ("none".equals(root)) root = xsr.getLocalName 
                               else if ("md".equals(xsr.getLocalName)) metadata = procAttrs(xsr)
-                              else if ("ln".equals(xsr.getLocalName)) links = Link(procAttrs(xsr)) :: links
+                              else if ("ln".equals(xsr.getLocalName)) links = procLink(xsr) :: links
                               else if ("url".equals(xsr.getLocalName) || "sitemap".equals(xsr.getLocalName)) 
                                        resources = procResource(xsr.getLocalName, xsr) :: resources
         case END_DOCUMENT => xsr.close
@@ -40,8 +40,8 @@ object XMLResourceMapReader {
       }
     }
 
-    val fromOpt: Option[Date] = metadata.get("from").map(W3CDateTime.parse(_))
-    val untilOpt: Option[Date] = metadata.get("until").map(W3CDateTime.parse(_))
+    val fromOpt: Option[Date] = if (metadata.get("from").isDefined) metadata.get("from").map(W3CDateTime.parse(_)) else None
+    val untilOpt: Option[Date] = if (metadata.get("until").isDefined) metadata.get("until").map(W3CDateTime.parse(_)) else None
 
     (metadata.get("capability").get, root) match {
       case ("resourcelist", "urlset") => ResourceList(fromOpt.get, links, resources)
@@ -68,7 +68,7 @@ object XMLResourceMapReader {
     var lastModified: Option[Date] = None
     var changeFrequency: Option[Frequency] = None
     var priority: Option[Double] = None
-    var metadata: Option[Metadata] = None
+    var metadata: Option[Map[String, String]] = None
     var links = List[Link]()
     var endResource = false
     while (xsr.hasNext && ! endResource) {
@@ -77,15 +77,29 @@ object XMLResourceMapReader {
                               else if ("lastmod".equals(xsr.getLocalName)) lastModified = Some(W3CDateTime.parse(xsr.getElementText))
                               else if ("changefreq".equals(xsr.getLocalName)) changeFrequency = Some(Frequency.withName(xsr.getElementText))
                               else if ("priority".equals(xsr.getLocalName)) priority = Some(xsr.getElementText.toDouble)
-                              else if ("md".equals(xsr.getLocalName)) metadata = Some(Metadata(procAttrs(xsr)))
-                              else if ("ln".equals(xsr.getLocalName)) links = Link(procAttrs(xsr)) :: links
+                              else if ("md".equals(xsr.getLocalName)) metadata = Some(procAttrs(xsr))
+                              else if ("ln".equals(xsr.getLocalName)) links = procLink(xsr) :: links
         case END_ELEMENT => if (tag.equals(xsr.getLocalName)) endResource = true
         case _ => // ignore
       }
     }
 
     if ("url".equals(tag)) URLResource(location, lastModified, changeFrequency, priority, metadata, links) else
-                           SiteResource(location, lastModified, None, None, metadata, links)
+                           SiteResource(location, lastModified, metadata, links)
+  }
+
+  private def procLink(xsr: XMLStreamReader): Link = {
+    var href: URL = null
+    var rel: String = null
+    var attrs = Map[String, String]()
+    for (i <- 0 to xsr.getAttributeCount) {
+      xsr.getAttributeLocalName(i) match {
+        case "href" => href = new URL(xsr.getAttributeValue(i))
+        case "rel" => rel = xsr.getAttributeValue(i)
+        case _ => attrs = attrs + (xsr.getAttributeLocalName(i) -> xsr.getAttributeValue(i))
+      }
+    }
+    Link(href, rel, attrs)
   }
 
   private def procAttrs(xsr: XMLStreamReader): Map[String, String] = {
