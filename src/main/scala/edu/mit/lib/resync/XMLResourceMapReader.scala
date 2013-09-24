@@ -19,51 +19,64 @@ import Frequency._
  *
  * @author richardrodgers
  */
-
 object XMLResourceMapReader {
 
-  def read(in: InputStream): ResourceMap = {
+  def read(in: InputStream): ResourceMap = read(in, true)
+
+  /**
+   * Reads and parses an input stream to create a resource map
+   *
+   * @param in the input stream to read
+   * @param full if true, parse entire document, else only read document-level attributes
+   */
+  def read(in: InputStream, full: Boolean): ResourceMap = {
     val xsr = XMLInputFactory.newInstance().createXMLStreamReader(in, "utf-8")
     var root = "none"
     var metadata: Map[String, String] = null
     var links = List[Link]()
     var resources = List[Resource]()
-    while (xsr.hasNext) {
+    var reading = true
+    while (xsr.hasNext && reading) {
       xsr.next match {
         case START_ELEMENT => if ("none".equals(root)) root = xsr.getLocalName 
                               else if ("md".equals(xsr.getLocalName)) metadata = procAttrs(xsr)
                               else if ("ln".equals(xsr.getLocalName)) links = procLink(xsr) :: links
                               else if ("url".equals(xsr.getLocalName) || "sitemap".equals(xsr.getLocalName)) 
-                                       resources = procResource(xsr.getLocalName, xsr) :: resources
-        case END_DOCUMENT => xsr.close
+                                       if (full) resources = procResource(xsr.getLocalName, xsr) :: resources
+                                       else reading = false
+        //case END_DOCUMENT => xsr.close
         case _ => // ignore
       }
     }
+    xsr.close
 
-    val fromOpt: Option[Date] = if (metadata.get("from").isDefined) metadata.get("from").map(W3CDateTime.parse(_)) else None
-    val untilOpt: Option[Date] = if (metadata.get("until").isDefined) metadata.get("until").map(W3CDateTime.parse(_)) else None
+    val from: Date = if (metadata.get("from").isDefined) metadata.get("from").map(W3CDateTime.parse(_)).get
+                     else if (metadata.get("at").isDefined) metadata.get("at").map(W3CDateTime.parse(_)).get
+                     else null
+    val until: Date = if (metadata.get("until").isDefined) metadata.get("until").map(W3CDateTime.parse(_)).get 
+                      else if (metadata.get("completed").isDefined) metadata.get("completed").map(W3CDateTime.parse(_)).get
+                      else null
 
     (metadata.get("capability").get, root) match {
-      case ("resourcelist", "urlset") => ResourceList(fromOpt.get, links, resources)
-      case ("resourcelist", "sitemapindex") => ResourceListIndex(fromOpt.get, links, resources)
-      case ("changelist", "urlset") => ChangeList(fromOpt.get, untilOpt.get, links, resources)
-      case ("changelist", "sitemapindex") => ChangeListIndex(fromOpt.get, untilOpt.get, links, resources)
+      case ("resourcelist", "urlset") => ResourceList(from, links, resources)
+      case ("resourcelist", "sitemapindex") => ResourceListIndex(from, links, resources)
+      case ("changelist", "urlset") => ChangeList(from, until, links, resources)
+      case ("changelist", "sitemapindex") => ChangeListIndex(from, until, links, resources)
       case ("capabilitylist", "urlset") => CapabilityList(links, resources)
-      case ("capabilitylist", "sitemapindex") => CapabilityListIndex(fromOpt.get, links, resources)
+      case ("capabilitylist", "sitemapindex") => CapabilityListIndex(from, links, resources)
       case ("resourcesync", "urlset") => Description(links, resources)
-      case ("resourcesync", "sitemapindex") => DescriptionIndex(fromOpt.get, links, resources)
-      case ("resourcedump", "urlset") => ResourceDump(fromOpt.get, links, resources)
-      case ("resourcedump", "sitemapindex") => ResourceDumpIndex(fromOpt.get, links, resources)
-      case ("resourcedump-manifest", "urlset") => ResourceDumpManifest(fromOpt.get, links, resources)
-      case ("changedump", "urlset") => ChangeDump(fromOpt.get, untilOpt.get, links, resources)
-      case ("changedump", "sitemapindex") => ChangeDumpIndex(fromOpt.get, untilOpt.get, links, resources)
-      case ("changedump-manifest", "urlset") => ChangeDumpManifest(fromOpt.get, untilOpt.get, links, resources)
+      case ("resourcesync", "sitemapindex") => DescriptionIndex(from, links, resources)
+      case ("resourcedump", "urlset") => ResourceDump(from, links, resources)
+      case ("resourcedump", "sitemapindex") => ResourceDumpIndex(from, links, resources)
+      case ("resourcedump-manifest", "urlset") => ResourceDumpManifest(from, links, resources)
+      case ("changedump", "urlset") => ChangeDump(from, until, links, resources)
+      case ("changedump", "sitemapindex") => ChangeDumpIndex(from, until, links, resources)
+      case ("changedump-manifest", "urlset") => ChangeDumpManifest(from, until, links, resources)
       case _ => throw new IllegalStateException("Unknown document type: " + root)
     }
   }
 
   private def procResource(tag: String, xsr: XMLStreamReader): Resource = {
-
     var location: URL = null
     var lastModified: Option[Date] = None
     var changeFrequency: Option[Frequency] = None
@@ -85,14 +98,14 @@ object XMLResourceMapReader {
     }
 
     if ("url".equals(tag)) URLResource(location, lastModified, changeFrequency, priority, metadata, links) else
-                           SiteResource(location, lastModified, metadata, links)
+                           MapResource(location, lastModified)
   }
 
   private def procLink(xsr: XMLStreamReader): Link = {
     var href: URL = null
     var rel: String = null
     var attrs = Map[String, String]()
-    for (i <- 0 to xsr.getAttributeCount) {
+    for (i <- 0 until xsr.getAttributeCount) {
       xsr.getAttributeLocalName(i) match {
         case "href" => href = new URL(xsr.getAttributeValue(i))
         case "rel" => rel = xsr.getAttributeValue(i)
@@ -104,7 +117,7 @@ object XMLResourceMapReader {
 
   private def procAttrs(xsr: XMLStreamReader): Map[String, String] = {
     var attrs = Map[String, String]()
-    for (i <- 0 to xsr.getAttributeCount) {
+    for (i <- 0 until xsr.getAttributeCount) {
       attrs = attrs + (xsr.getAttributeLocalName(i) -> xsr.getAttributeValue(i))
     }
     attrs

@@ -5,7 +5,6 @@
 
 package edu.mit.lib.resync
 
-import java.net.URL
 import java.util.Date
 
 /**
@@ -36,6 +35,7 @@ sealed trait ResourceMap {
   def expiry: Option[Date]
   def links: Seq[Link]
   def resources: Seq[Resource]
+  def listLike = List(resourcelist, resourcedump, resourcedumpmanifest).contains(capability)
 }
 
 trait UrlSet {
@@ -52,6 +52,9 @@ case class Description(links: Seq[Link], resources: Seq[Resource]) extends Resou
   def capability = resourcesync
   def validity = None
   def expiry = None
+   def withResource(res: Resource): Description = {
+    if (resources.exists(_.location == res.location)) this else Description(links, res +: resources)
+  }
 }
 case class DescriptionIndex(from: Date, links: Seq[Link], resources: Seq[Resource]) extends ResourceMap with MapIndex {
   def capability = resourcesync
@@ -62,6 +65,9 @@ case class CapabilityList(links: Seq[Link], resources: Seq[Resource]) extends Re
   def capability = capabilitylist
   def validity = None
   def expiry = None
+  def withResource(res: Resource): CapabilityList = {
+    if (resources.exists(_.location == res.location)) this else CapabilityList(links, res +: resources)
+  }
 }
 case class CapabilityListIndex(from: Date, links: Seq[Link], resources: Seq[Resource]) extends ResourceMap with MapIndex {
   def capability = capabilitylist

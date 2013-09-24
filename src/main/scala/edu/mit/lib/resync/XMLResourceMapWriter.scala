@@ -16,9 +16,14 @@ import Capability._
  *
  * @author richardrodgers
  */
-
 object XMLResourceMapWriter {
   
+  /**
+   * Writes a resource map as an XML document to a stream
+   *
+   * @param resMap the resource map
+   * @param out the output stream
+   */
   def write(resMap: ResourceMap, out: OutputStream) {
     val xsw = XMLOutputFactory.newInstance.createXMLStreamWriter(out, "utf-8")
     xsw.writeStartDocument("utf-8", "1.0")
@@ -30,7 +35,8 @@ object XMLResourceMapWriter {
     resMap.links.foreach { link => writeLink(link, xsw) }
     xsw.writeEmptyElement(ResourceSync.uri, "md")
     xsw.writeAttribute("capability", resMap.capability.toString)
-    if (resMap.validity.isDefined) xsw.writeAttribute("from", W3CDateTime.format(resMap.validity.get))
+    val validAttr = if (resMap.listLike) "at" else "from"
+    if (resMap.validity.isDefined) xsw.writeAttribute(validAttr, W3CDateTime.format(resMap.validity.get))
     if (resMap.expiry.isDefined) xsw.writeAttribute("until", W3CDateTime.format(resMap.expiry.get))
     resMap.resources.foreach { res => writeResource(resMap.resourceName, res, xsw) }
     xsw.writeEndElement
@@ -43,7 +49,7 @@ object XMLResourceMapWriter {
     writer.writeAttribute("href", link.href.toString)
     writer.writeAttribute("rel", link.rel)
     link.attrs.keySet.foreach { key =>
-      writer.writeAttribute(key, link.attrs.get(key).get)
+      println("'" + key + "'"); writer.writeAttribute(key, link.attrs.get(key).get)
     }
   }
 

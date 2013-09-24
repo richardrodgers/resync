@@ -42,9 +42,11 @@ sealed abstract class Resource {
 case class URLResource(location: URL, lastModified: Option[Date] = None, changeFrequency: Option[Frequency] = None,
                        priority: Option[Double] = None, metadata: Option[Map[String, String]] = None, links: Seq[Link] = List()) extends Resource
 
-case class SiteResource(location: URL, lastModified: Option[Date], metadata: Option[Map[String, String]], links: Seq[Link]) extends Resource {
+case class MapResource(location: URL, lastModified: Option[Date] = None) extends Resource {
   val changeFrequency = None
   val priority = None
+  val metadata = None
+  val links = List()
 }
 
 case class Namespace(prefix: String, uri: String)
