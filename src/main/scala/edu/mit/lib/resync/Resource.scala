@@ -39,13 +39,16 @@ sealed abstract class Resource {
   val links: Seq[Link]
 }
 
-case class URLResource(location: URL, lastModified: Option[Date] = None, changeFrequency: Option[Frequency] = None,
-                       priority: Option[Double] = None, metadata: Option[Map[String, String]] = None, links: Seq[Link] = List()) extends Resource
+case class URLResource(location: URL, lastModified: Option[Date] = None, 
+                       changeFrequency: Option[Frequency] = None,
+                       priority: Option[Double] = None,
+                       metadata: Option[Map[String, String]] = None,
+                       links: Seq[Link] = List()) extends Resource
 
-case class MapResource(location: URL, lastModified: Option[Date] = None) extends Resource {
+case class MapResource(location: URL, lastModified: Option[Date] = None,
+                       metadata: Option[Map[String, String]] = None) extends Resource {
   val changeFrequency = None
   val priority = None
-  val metadata = None
   val links = List()
 }
 
