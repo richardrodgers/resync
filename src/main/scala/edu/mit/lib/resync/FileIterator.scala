@@ -22,6 +22,7 @@ import java.util.Date
 
 class FileDescription(path: Path, baseURL: String, resSet: String) extends ResourceDescription {
   def location: URL = composeURL
+  def name: Option[String] = Some(path.getFileName.toString)
   def modified: Option[Date] = Some(new Date(Files.getLastModifiedTime(path).toMillis))
   def checksum: Option[String] = Some(checksum(content.get))
   def size: Option[Long] = Some(Files.size(path))
@@ -59,6 +60,10 @@ class FileIterator(rootDir: String, resSetName: String = "") extends ResourceIte
     def next = new FileDescription(dsIter.next, baseURL, resSetName)
   }
   def close = dirStream.close
+}
+
+object FileIterator {
+  def apply(rootDir: String, resSetName: String = "") = new FileIterator(rootDir, resSetName)
 }
 
 

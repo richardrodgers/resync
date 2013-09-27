@@ -53,6 +53,8 @@ If one prefers the 'DSL' style of invocation:
 
     builder list changes resources FileIterator "/home/bob" build
 
+Dump files are restricted to 50 MB, so if the resource enumerator has more than that, they are broken
+into sequentially numbered dump files.
 
 ### Reading ResourceSync Documents ###
 

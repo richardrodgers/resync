@@ -5,19 +5,20 @@
 
 package edu.mit.lib.resync
 
-import java.io.{Closeable, File, InputStream}
+import java.io.{Closeable, InputStream}
 import java.net.URL
 import java.util.Date
 
 /**
  * ResourceIterator describes a class that can enumerate and describe resources.
- * Resource description must include a resource URL, all else optional.
+ * The resource description must include a resource URL, all other attributes optional.
  *
  * @author richardrodgers
  */
 
 trait ResourceDescription {
   def location: URL
+  def name: Option[String]
   def modified: Option[Date]
   def checksum: Option[String]
   def size: Option[Long]

@@ -6,7 +6,8 @@
 package edu.mit.lib.resync
 
 import java.io.{File, FileInputStream, FileOutputStream}
-import java.net.URL
+import java.net.{URI, URL}
+import java.nio.file.{Files, FileSystem, FileSystems}
 import java.util.Date
 
 /**
@@ -21,8 +22,9 @@ import java.util.Date
 class ResyncBuilder(docDir: String, baseURL: String) {
 
   import Capability._
+  import ResyncBuilder._
+
   var iterator: ResourceIterator = null
-  var iter: Iterator[ResourceDescription] = null
   var setName: String = null
   var buildList = false
   var buildDump = false
@@ -32,7 +34,6 @@ class ResyncBuilder(docDir: String, baseURL: String) {
     iterator = theIterator
     iterator.setBaseURL(baseURL)
     setName = iterator.resourceSet
-    iter = iterator.iterator
     this
   }
 
@@ -52,47 +53,46 @@ class ResyncBuilder(docDir: String, baseURL: String) {
   }
 
   def build() {
-    // build then serialize the resource/change list
-    import ResyncBuilder._
-    var resourceMap: ResourceMap = null
-    var mapFile: File = null
+    // build then serialize the resource/change/dump list
     var resList = List[URLResource]()
+    var dumpList = List[URLResource]()
+    var index = 1
+    var written = 0L
+    var zipfs: FileSystem = if (buildDump) zipFS(index) else null
+    val upLink = Link(docURL(capabilitylist.toString), "up", Map())
+    val iter = iterator.iterator
     while (iter.hasNext) {
       val desc = iter.next
-      var md: Option[Map[String, String]] = None
-      if (! buildChanges) {
-        md = if (desc.checksum.isDefined) Some(Map("hash" -> desc.checksum.get)) else None
-      } else {
-        md = Some(Map("change" -> desc.change.get))
+      if (buildDump) {
+        if (written > maxDumpSize) {
+          dumpList = closeDump(upLink, resList, index, zipfs) :: dumpList
+          index = index + 1
+          zipfs = zipFS(index)
+          written = 0L
+          resList = List()
+        }
+        // squirrel away the resource bits into a zip file
+        val src = desc.content.get
+        written = written + Files.copy(src, zipfs.getPath(desc.name.get))
+        src.close
       }
-      resList = URLResource(desc.location, desc.modified, metadata = md) :: resList
+      resList = URLResource(desc.location, desc.modified, metadata = Some(resMetadata(desc))) :: resList
     }
     iterator.close
-    // provide an uplink to capability list
-    val upLink = Link(docURL(capabilitylist.toString), "up", Map())
     if (buildList) {
-      if (! buildChanges) {
-        resourceMap = ResourceList(links = List(upLink), resources = resList)
+      if (buildChanges) {
+        save(ChangeList(new Date, new Date, List(upLink), resources = resList))
       } else {
-        resourceMap = ChangeList(new Date, new Date, List(upLink), resources = resList)
+        save(ResourceList(links = List(upLink), resources = resList))
       }
-      // serialize to disk & update capability list
-      mapFile = docFile(resourceMap.capability.toString)
-      XMLResourceMapWriter.write(resourceMap, new FileOutputStream(mapFile))
-      checkCapability(resourceMap)
     }
     if (buildDump) {
-      if (! buildChanges) {
-        resourceMap = ResourceDumpManifest(new Date, links = List(upLink), resources = resList)
-        // now construct the ResouceDump document itself
-        var dump = ResourceDump(new Date, links = List(upLink), resources = resList)
-        //XMLResourceMapWriter.write(resourceMap, new FileOutputStream(mapFile)) 
+      dumpList = closeDump(upLink, resList, index, zipfs) :: dumpList
+      if (buildChanges) {
+        save(ChangeDump(new Date, new Date, List(upLink), resources = dumpList))
       } else {
-        resourceMap = ChangeDumpManifest(new Date, new Date, List(upLink), resources = resList)
-      }
-      // serialize to disk
-      mapFile = docFile(resourceMap.capability.toString)
-      XMLResourceMapWriter.write(resourceMap, new FileOutputStream(mapFile))   
+        save(ResourceDump(new Date, links = List(upLink), resources = dumpList))
+      } 
     }
     // now add capability file to description if needed
     val dmd = Map("capability" -> capabilitylist.toString)
@@ -101,10 +101,54 @@ class ResyncBuilder(docDir: String, baseURL: String) {
     val desc = description(descFile).withResource(descMapRes)
     // commit changes back to disk
     XMLResourceMapWriter.write(desc, new FileOutputStream(descFile))
+    // clear flags
+    buildList = false; buildDump = false; buildChanges = false
+  }
+
+  private def closeDump(upLink: Link, resList: List[URLResource], index: Int, zipfs: FileSystem): URLResource = {
+    val manif = if (buildChanges) ChangeDumpManifest(new Date, new Date, links = List(upLink), resources = resList)
+                             else ResourceDumpManifest(new Date, links = List(upLink), resources = resList)
+    // serialize the manifest, then copy to the zip archive
+    saveManifest(manif, manif.capability.toString + index)
+    val manifPath = docFile(manif.capability.toString + index).toPath
+    Files.copy(manifPath, zipfs.getPath(zipManifestName))
+    zipfs.close
+    // return a resource for this dump to the list
+    val resName = if (buildChanges) changedump.toString else resourcedump.toString
+    new URLResource(zipURL(resName + index), Some(new Date), metadata = None)
+  }
+
+  private def resMetadata(desc: ResourceDescription): Map[String, String] = {
+    var md: Map[String, String] = Map()
+    if (! buildChanges) {
+      if (desc.checksum.isDefined) md += "hash" -> desc.checksum.get
+    }
+    if (desc.size.isDefined) md += "length" -> desc.size.get.toString
+    if (buildDump) md += "path" -> desc.name.get
+    if (buildChanges) md += "change" -> desc.change.get
+    md
+  }
+
+  private def save(resourceMap: ResourceMap) {
+    // serialize map to disk and update capability file if needed
+    val mapFile = docFile(resourceMap.capability.toString)
+    XMLResourceMapWriter.write(resourceMap, new FileOutputStream(mapFile))
+    checkCapability(resourceMap)   
+  }
+
+  private def saveManifest(resourceMap: ResourceMap, extName: String) {
+    val mapFile = docFile(extName)
+    XMLResourceMapWriter.write(resourceMap, new FileOutputStream(mapFile))
+  }
+
+  private def zipFS(index: Int): FileSystem = {
+    var env = new java.util.HashMap[String, String]()
+    env.put("create", "true")
+    val name = if (buildChanges) changedump.toString else resourcedump.toString 
+    FileSystems.newFileSystem(zipUri(name + index), env)
   }
 
   private def checkCapability(resMap: ResourceMap) {
-    import ResyncBuilder._
     val name = resMap.capability.toString
     val md = Map("capability" -> name)
     val resMapRes = URLResource(docURL(name), metadata = Some(md))
@@ -125,13 +169,23 @@ class ResyncBuilder(docDir: String, baseURL: String) {
 
   private def description(descFile: File): Description = {
     // read from disk if present
-    import ResyncBuilder._
     if (descFile.exists) {
       XMLResourceMapReader.read(new FileInputStream(descFile)).asInstanceOf[Description]
     } else {
       // create a new empty description
       Description(List(), List())
     }
+  }
+
+  private def zipURL(name: String): URL = {
+    val url = if (! "".equals(setName)) baseURL + setName + "/" else baseURL
+    new URL(url + name + ".zip")
+  }
+
+  private def zipUri(name: String): URI = {
+    val path = if (! "".equals(setName)) docDir + "/" + setName else docDir
+    new File(path).mkdirs
+    URI.create("jar:file:" + path + "/" + name + ".zip")
   }
 
   private def docFile(capability: String): File = {
@@ -149,31 +203,12 @@ class ResyncBuilder(docDir: String, baseURL: String) {
 object ResyncBuilder {
 
   val maxListResources = 50000
-  val maxDumpSize = 1024
+  val maxDumpSize = 52428800  // 50 MB
   
   val descriptionName = "description"
+  val zipManifestName = "manifest.xml"
 
   def apply(docDir: String, baseURL: String) = new ResyncBuilder(docDir, baseURL)
-}
-
-class DumpBuilder {
-
-  var from: Date = new Date
-  var urlList: List[URLResource] = List()
-
-  def resourceDump = ResourceDump(from, List(), urlList)
-}
-
-class ManifestBuilder {
-
-  var from: Date = new Date
-  var until: Date = new Date
-  var urlList: List[URLResource] = List()
-
-  def listZip = ResourceDumpManifest(from, List(), urlList)
-  def listManifest = ResourceDumpManifest(from, List(), urlList)
-  def changeZip = ChangeDumpManifest(from, until, List(), urlList)
-  def changeManifest = ChangeDumpManifest(from, until, List(), urlList)
 }
 
 class IndexBuilder {

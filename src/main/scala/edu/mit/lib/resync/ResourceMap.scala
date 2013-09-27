@@ -119,7 +119,7 @@ case class ChangeDumpIndex(from: Date, until: Date, links: Seq[Link], resources:
   def validity = Some(from)
   def expiry = Some(until)
 }
-case class ChangeDumpManifest(from: Date, until: Date,links: Seq[Link], resources: Seq[Resource]) extends ResourceMap with UrlSet {
+case class ChangeDumpManifest(from: Date, until: Date, links: Seq[Link], resources: Seq[Resource]) extends ResourceMap with UrlSet {
   def capability = changedumpmanifest
   def validity = Some(from)
   def expiry = Some(until)
