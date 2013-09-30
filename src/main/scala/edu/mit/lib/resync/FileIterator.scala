@@ -12,6 +12,8 @@ import java.nio.file.{DirectoryStream, Files, Path, Paths}
 import java.security.{DigestInputStream, MessageDigest}
 import java.util.Date
 
+import Frequency._
+
 /**
  * FileIterator is a ResourceIterator for files in a file system,
  * It iterates over all files in passed directory, using OS-supplied
@@ -26,8 +28,11 @@ class FileDescription(path: Path, baseURL: String, resSet: String) extends Resou
   def modified: Option[Date] = Some(new Date(Files.getLastModifiedTime(path).toMillis))
   def checksum: Option[String] = Some(checksum(content.get))
   def size: Option[Long] = Some(Files.size(path))
-  def content: Option[InputStream] = Some(Files.newInputStream(path))
+  def mimetype: Option[String] = None
+  def frequency: Option[Frequency] = None
+  def priority: Option[Double] = None
   def change: Option[String] = Some("created")
+  def content: Option[InputStream] = Some(Files.newInputStream(path))
 
   private def composeURL: URL = {
     val sb: StringBuilder = new StringBuilder(baseURL)
@@ -51,10 +56,14 @@ class FileDescription(path: Path, baseURL: String, resSet: String) extends Resou
 
 class FileIterator(rootDir: String, resSetName: String = "") extends ResourceIterator {
   var baseURL: String = null
-  val dirStream = Files.newDirectoryStream(Paths.get(rootDir))
+  val dirFilter = new DirectoryStream.Filter[Path] {
+    def accept(dir: Path): Boolean = ! Files.isDirectory(dir)
+  }
+  val dirStream = Files.newDirectoryStream(Paths.get(rootDir), dirFilter)
   val dsIter: java.util.Iterator[Path] = dirStream.iterator
   def setBaseURL(url: String) = {baseURL = url}
   def resourceSet = resSetName
+  def setDescURL = None
   def iterator = new Iterator[ResourceDescription] {
     def hasNext = dsIter.hasNext
     def next = new FileDescription(dsIter.next, baseURL, resSetName)
@@ -65,6 +74,3 @@ class FileIterator(rootDir: String, resSetName: String = "") extends ResourceIte
 object FileIterator {
   def apply(rootDir: String, resSetName: String = "") = new FileIterator(rootDir, resSetName)
 }
-
-
-

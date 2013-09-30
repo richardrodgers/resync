@@ -35,9 +35,10 @@ object XMLResourceMapWriter {
     resMap.links.foreach { link => writeLink(link, xsw) }
     xsw.writeEmptyElement(ResourceSync.uri, "md")
     xsw.writeAttribute("capability", resMap.capability.toString)
-    val validAttr = if (resMap.listLike) "at" else "from"
-    if (resMap.validity.isDefined) xsw.writeAttribute(validAttr, W3CDateTime.format(resMap.validity.get))
-    if (resMap.expiry.isDefined) xsw.writeAttribute("until", W3CDateTime.format(resMap.expiry.get))
+    val validityAttr = if (resMap.listLike) "at" else "from"
+    val expiryAttr = if (resMap.listLike) "completed" else "until"
+    if (resMap.validity.isDefined) xsw.writeAttribute(validityAttr, W3CDateTime.format(resMap.validity.get))
+    if (resMap.expiry.isDefined) xsw.writeAttribute(expiryAttr, W3CDateTime.format(resMap.expiry.get))
     resMap.resources.foreach { res => writeResource(resMap.resourceName, res, xsw) }
     xsw.writeEndElement
     xsw.writeEndDocument
@@ -49,7 +50,7 @@ object XMLResourceMapWriter {
     writer.writeAttribute("href", link.href.toString)
     writer.writeAttribute("rel", link.rel)
     link.attrs.keySet.foreach { key =>
-      println("'" + key + "'"); writer.writeAttribute(key, link.attrs.get(key).get)
+      writer.writeAttribute(key, link.attrs.get(key).get)
     }
   }
 

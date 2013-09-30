@@ -16,24 +16,31 @@ import java.util.Date
  *
  * @param docDir the root directory for builder-managed documents
  * @param baseURL the URL stem for all builder-managed documents
+ * @param descURL URL to a resource with information about the ResourceSync source
  *
  * @author richardrodgers
  */
-class ResyncBuilder(docDir: String, baseURL: String) {
+class ResyncBuilder(docDir: String, baseURL: String, descURL: String = null) {
 
   import Capability._
   import ResyncBuilder._
 
   var iterator: ResourceIterator = null
   var setName: String = null
+  var setDescURL: String = null
+  var baseLinks: List[Link] = null
   var buildList = false
   var buildDump = false
   var buildChanges = false
+  var start: Date = null
 
   def resources(theIterator: ResourceIterator): ResyncBuilder = {
     iterator = theIterator
     iterator.setBaseURL(baseURL)
     setName = iterator.resourceSet
+    setDescURL = iterator.setDescURL.getOrElse(null)
+    // all documents should include the 'uplink' to the capability list
+    baseLinks = List(Link(docURL(capabilitylist.toString), "up", Map()))
     this
   }
 
@@ -63,29 +70,31 @@ class ResyncBuilder(docDir: String, baseURL: String) {
     var mapIndex = 0
     var written = 0L
     var zipfs: FileSystem = if (buildDump) zipFS(dumpIndex) else null
-    val upLink = Link(docURL(capabilitylist.toString), "up", Map())
     val iter = iterator.iterator
+    start = new Date
     while (iter.hasNext) {
       val desc = iter.next
-      val res = URLResource(desc.location, desc.modified, metadata = Some(resMetadata(desc)))
+      val res = URLResource(desc.location, desc.modified, desc.frequency, desc.priority, metadata = Some(resMetadata(desc)))
       if (buildDump) {
         if (written > maxDumpSize) {
-          dumpList = closeDump(upLink, dumpResList, dumpIndex, zipfs) :: dumpList
+          dumpList = closeDump(dumpResList, dumpIndex, zipfs) :: dumpList
           dumpIndex += 1
           zipfs = zipFS(dumpIndex)
           written = 0L
           dumpResList = List()
         }
-        // squirrel away the resource bits into a zip file
-        val src = desc.content.get
-        written = written + Files.copy(src, zipfs.getPath(desc.name.get))
-        src.close
+        // squirrel away the resource bits into a zip file, unless a deletion change
+        if (! (buildChanges && (desc.change.get == "deleted"))) {
+          val src = desc.content.get
+          written = written + Files.copy(src, zipfs.getPath("/resources/" + desc.name.get))
+          src.close
+        }
         dumpResList = res :: dumpResList
       }
       if (buildList) {
         if (counter == maxListSize) {
           // will need multiple lists and an index - finish this one and proceed
-          indexList = closeList(upLink, listResList, mapIndex, true) :: indexList
+          indexList = closeList(listResList, mapIndex, true) :: indexList
           mapIndex += 1
           listResList = List()
         }
@@ -96,58 +105,64 @@ class ResyncBuilder(docDir: String, baseURL: String) {
     iterator.close
     if (buildList) {
       val multiList = indexList.size > 0
-      indexList = closeList(upLink, listResList, mapIndex, multiList) :: indexList
+      indexList = closeList(listResList, mapIndex, multiList) :: indexList
       if (multiList) {
         // we need to construct an index document
         if (buildChanges) {
-          save(ChangeListIndex(new Date, new Date, List(upLink), resources = indexList), changelist.toString)
+          save(ChangeListIndex(new Date, new Date, baseLinks, resources = indexList), changelist.toString)
         } else {
-          save(ResourceListIndex(new Date, links = List(upLink), resources = indexList), resourcelist.toString)
+          save(ResourceListIndex(new Date, links = baseLinks, resources = indexList), resourcelist.toString)
         }
       }
     }
     if (buildDump) {
-      dumpList = closeDump(upLink, dumpResList, dumpIndex, zipfs) :: dumpList
+      dumpList = closeDump(dumpResList, dumpIndex, zipfs) :: dumpList
       if (buildChanges) {
-        save(ChangeDump(new Date, new Date, List(upLink), resources = dumpList), changedump.toString)
+        save(ChangeDump(new Date, new Date, baseLinks, resources = dumpList), changedump.toString)
       } else {
-        save(ResourceDump(new Date, links = List(upLink), resources = dumpList), resourcedump.toString)
+        save(ResourceDump(new Date, links = baseLinks, resources = dumpList), resourcedump.toString)
       } 
     }
     // now add capability file to description if needed
     val dmd = Map("capability" -> capabilitylist.toString)
-    val descMapRes = URLResource(docURL(capabilitylist.toString), metadata = Some(dmd))
+    val descLink = getCapabilityList.links.find(_.rel == "describedby")
+    val myLinks = if (descLink.isDefined) List(descLink.get) else List()
+    val descMapRes = URLResource(docURL(capabilitylist.toString), metadata = Some(dmd), links = myLinks)
     val descFile = new File(docDir, descriptionName + ".xml")
     val desc = if (descFile.exists) {
       XMLResourceMapReader.read(new FileInputStream(descFile)).asInstanceOf[Description]
     } else {
       // create a new empty description
-      Description(List(), List())
+      val descLinks = if (descURL != null) List(Link(new URL(descURL), "describedby", Map())) else List()
+      Description(descLinks, List())
     }
     // commit changes back to disk
     XMLResourceMapWriter.write(desc.withResource(descMapRes), new FileOutputStream(descFile))
     // clear flags
     buildList = false; buildDump = false; buildChanges = false
+    start = null
   }
 
-  private def closeList(upLink: Link, resList: List[URLResource], mapIndex: Int, index: Boolean = false): MapResource = {
-    var theLinks = List(upLink)
+  private def closeList(resList: List[URLResource], mapIndex: Int, index: Boolean = false): MapResource = {
     val listName = if (buildChanges) changelist.toString else resourcelist.toString
-    if (index) {
-      val idxLink = Link(docURL(listName), "index", Map())
-      theLinks = idxLink :: theLinks
-    }
+    val fullName = if (index) listName + mapIndex else listName
+    var theLinks = if (index) Link(docURL(listName), "index", Map()) :: baseLinks else baseLinks
     if (buildChanges) {
-      save(ChangeList(new Date, new Date, theLinks, resources = resList), listName + mapIndex)
+      // change lists must be time-ordered
+      val ordered = resList.sortWith((x: URLResource, y: URLResource) => x.lastModified.get.before(y.lastModified.get))
+      save(ChangeList(new Date, new Date, theLinks, resources = ordered), fullName)
     } else {
-      save(ResourceList(links = theLinks, resources = resList), listName + mapIndex)
+      save(ResourceList(start, links = theLinks, resources = resList), fullName)
     }
     new MapResource(docURL(listName + mapIndex), Some(new Date))
   }
 
-  private def closeDump(upLink: Link, resList: List[URLResource], index: Int, zipfs: FileSystem): URLResource = {
-    val manif = if (buildChanges) ChangeDumpManifest(new Date, new Date, links = List(upLink), resources = resList)
-                             else ResourceDumpManifest(new Date, links = List(upLink), resources = resList)
+  private def closeDump(resList: List[URLResource], index: Int, zipfs: FileSystem): URLResource = {
+    val manif = if (buildChanges) {
+      // change lists must be time-ordered
+      val ordered = resList.sortWith((x: URLResource, y: URLResource) => x.lastModified.get.before(y.lastModified.get))
+      ChangeDumpManifest(new Date, new Date, links = baseLinks, resources = ordered)
+    } else ResourceDumpManifest(new Date, links = baseLinks, resources = resList)
     // serialize the manifest, then copy to the zip archive
     val manifFile = docFile(manif.capability.toString + index)
     XMLResourceMapWriter.write(manif, new FileOutputStream(manifFile))
@@ -156,7 +171,10 @@ class ResyncBuilder(docDir: String, baseURL: String) {
     zipfs.close
     // return a resource for this dump to the list
     val resName = if (buildChanges) changedump.toString else resourcedump.toString
-    new URLResource(zipURL(resName + index), Some(new Date), metadata = None)
+    val length = zipFile(resName + index).length.toString
+    val md = Map("type" -> "application/zip", "length" -> length)
+    val dumpLinks = List(Link(docURL(manif.capability.toString + index), "content", Map("type" -> "application/xml")))
+    new URLResource(zipURL(resName + index), Some(new Date), metadata = Some(md), links = dumpLinks)
   }
 
   private def resMetadata(desc: ResourceDescription): Map[String, String] = {
@@ -165,7 +183,8 @@ class ResyncBuilder(docDir: String, baseURL: String) {
       if (desc.checksum.isDefined) md += "hash" -> desc.checksum.get
     }
     if (desc.size.isDefined) md += "length" -> desc.size.get.toString
-    if (buildDump) md += "path" -> desc.name.get
+    if (desc.mimetype.isDefined) md += "type" -> desc.mimetype.get
+    if (buildDump) md += "path" -> ("/resources/" + desc.name.get)
     if (buildChanges) md += "change" -> desc.change.get
     md
   }
@@ -177,30 +196,39 @@ class ResyncBuilder(docDir: String, baseURL: String) {
     checkCapability(resourceMap)   
   }
 
-  private def zipFS(index: Int): FileSystem = {
-    var env = new java.util.HashMap[String, String]()
-    env.put("create", "true")
-    val name = if (buildChanges) changedump.toString else resourcedump.toString 
-    FileSystems.newFileSystem(zipUri(name + index), env)
-  }
-
   private def checkCapability(resMap: ResourceMap) {
     val name = resMap.capability.toString
     val md = Map("capability" -> name)
     val resMapRes = URLResource(docURL(name), metadata = Some(md))
     val capFile = docFile(capabilitylist.toString)
+    val capList = getCapabilityList
+    // commit changes back to disk
+    XMLResourceMapWriter.write(capList.withResource(resMapRes), new FileOutputStream(capFile))
+  }
+
+  private def getCapabilityList: CapabilityList = {
     // read from disk if present
-    val capList =
+    val capFile = docFile(capabilitylist.toString)
     if (capFile.exists) {
       XMLResourceMapReader.read(new FileInputStream(capFile)).asInstanceOf[CapabilityList]
     } else {
       // create a new empty capability list
-      val docUpLink = Link(new URL(baseURL + descriptionName + ".xml"), "up", Map())
-      CapabilityList(List(docUpLink), List())
-    }
-    val updCapList = capList.withResource(resMapRes)
-    // commit changes back to disk
-    XMLResourceMapWriter.write(updCapList, new FileOutputStream(capFile))
+      val docUpLinks = List(Link(new URL(baseURL + descriptionName + ".xml"), "up", Map()))
+      val theLinks = if (setDescURL != null) Link(new URL(descURL), "describedby", Map()) :: docUpLinks else docUpLinks
+      CapabilityList(theLinks, List())
+    }    
+  } 
+
+  private def zipFS(index: Int): FileSystem = {
+    var env = new java.util.HashMap[String, String]()
+    env.put("create", "true")
+    val name = if (buildChanges) changedump.toString else resourcedump.toString
+    // blow away any existing zip file
+    val zip = zipFile(name + index)
+    if (zip.exists) zip.delete
+    val zipfs = FileSystems.newFileSystem(zipURI(name + index), env)
+    Files.createDirectory(zipfs.getPath("/resources"))
+    zipfs
   }
 
   private def zipURL(name: String): URL = {
@@ -208,10 +236,15 @@ class ResyncBuilder(docDir: String, baseURL: String) {
     new URL(url + name + ".zip")
   }
 
-  private def zipUri(name: String): URI = {
+  private def zipURI(name: String): URI = {
     val path = if (! "".equals(setName)) docDir + "/" + setName else docDir
     new File(path).mkdirs
     URI.create("jar:file:" + path + "/" + name + ".zip")
+  }
+
+  private def zipFile(name: String): File = {
+    val root = if (! "".equals(setName)) new File(docDir, setName) else new File(docDir)
+    new File(root, name + ".zip")
   }
 
   private def docFile(capability: String): File = {
@@ -234,5 +267,5 @@ object ResyncBuilder {
   val descriptionName = "description"
   val zipManifestName = "manifest.xml"
 
-  def apply(docDir: String, baseURL: String) = new ResyncBuilder(docDir, baseURL)
+  def apply(docDir: String, baseURL: String, descURL: String = null) = new ResyncBuilder(docDir, baseURL, descURL)
 }

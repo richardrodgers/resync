@@ -5,6 +5,8 @@ Repo contains a library to facilitate:
 * parsing of ResourceSync documents into sets of resource descriptions
 
 It generally conforms to the '0.9.1' (beta) version of the ResourceSync Framework Specification.
+All of the mandatory data elements and attributes are provided, and most of the _recommended_ 
+are as well, and some of the _optional_ ones.
 
 ## Usage ##
 
@@ -32,16 +34,17 @@ index (if needed). Thus:
 
     http://www.example.com/rs/data1/resourcelist.xml
 
-has components: baseURL <http://www.example.com/rs/>, resource set name <data1>, etc
-Note that actual resource URLs need not bear any relation to these URLs, but in the
-sample resource iterator (FileIterator), the base URL and resource set name are in fact used.
+has components: baseURL 'http://www.example.com/rs/', resource set name 'data1', capability 
+name 'resourcelist', etc. Note that actual resource URLs (those itemized in lists, dumps, etc)
+need not bear any relation to these URLs, but in the sample resource iterator (FileIterator),
+the base URL and resource set name are in fact used.
 
 To create ResourceSync documents, the library requires a 'resource iterator' object
 that describes each resource in a resource set to be included in the list, dump, etc
 Users will typically write custom iterators of their own, but the library contains a simple
 iterator that describes files in a directory as resources. Thus, to create a simple resource
 list of the files in '/home/bob', using base URL 'http://example.com', and placing the
-resulting ResourceSync XML files in the document directory '/public/resync', we would:
+resulting ResourceSync XML files in the document directory '/public/resync', we would code:
 
     val builder = ResyncBuilder("/public/resync/", "http://example.com/")
     builder.list().resources(new FileIterator("/home/bob")).build()
@@ -85,7 +88,7 @@ configure the library to cope with the fragmentation.
 
 #### Resource and Change Lists ####
 
-Similarly, to conform to the recommendations of Sitemap community pratice, the library
+Similarly, to conform to the recommendations of Sitemap community practice, the library
 will not construct resource or change lists with over 50,000 resources. When this limit
 is reached, the library will segment the resources accross multiple numbered lists and
 create a resource or change list index to enumerate them. Again, no configuration or action

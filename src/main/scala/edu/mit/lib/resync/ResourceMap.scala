@@ -52,7 +52,7 @@ case class Description(links: Seq[Link], resources: Seq[Resource]) extends Resou
   def capability = resourcesync
   def validity = None
   def expiry = None
-   def withResource(res: Resource): Description = {
+  def withResource(res: Resource): Description = {
     if (resources.exists(_.location == res.location)) this else Description(links, res +: resources)
   }
 }
