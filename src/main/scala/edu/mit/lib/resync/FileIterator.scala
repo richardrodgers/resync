@@ -31,6 +31,7 @@ class FileDescription(path: Path, baseURL: String, resSet: String) extends Resou
   def mimetype: Option[String] = None
   def frequency: Option[Frequency] = None
   def priority: Option[Double] = None
+  def links: Seq[Link] = List()
   def change: Option[String] = Some("created")
   def content: Option[InputStream] = Some(Files.newInputStream(path))
 

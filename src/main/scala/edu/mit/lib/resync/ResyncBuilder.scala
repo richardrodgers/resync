@@ -74,7 +74,7 @@ class ResyncBuilder(docDir: String, baseURL: String, descURL: String = null) {
     start = new Date
     while (iter.hasNext) {
       val desc = iter.next
-      val res = URLResource(desc.location, desc.modified, desc.frequency, desc.priority, metadata = Some(resMetadata(desc)))
+      val res = URLResource(desc.location, desc.modified, desc.frequency, desc.priority, resMetadata(desc), desc.links)
       if (buildDump) {
         if (written > maxDumpSize) {
           dumpList = closeDump(dumpResList, dumpIndex, zipfs) :: dumpList
@@ -177,7 +177,7 @@ class ResyncBuilder(docDir: String, baseURL: String, descURL: String = null) {
     new URLResource(zipURL(resName + index), Some(new Date), metadata = Some(md), links = dumpLinks)
   }
 
-  private def resMetadata(desc: ResourceDescription): Map[String, String] = {
+  private def resMetadata(desc: ResourceDescription): Option[Map[String, String]] = {
     var md: Map[String, String] = Map()
     if (! buildChanges) {
       if (desc.checksum.isDefined) md += "hash" -> desc.checksum.get
@@ -186,7 +186,7 @@ class ResyncBuilder(docDir: String, baseURL: String, descURL: String = null) {
     if (desc.mimetype.isDefined) md += "type" -> desc.mimetype.get
     if (buildDump) md += "path" -> ("/resources/" + desc.name.get)
     if (buildChanges) md += "change" -> desc.change.get
-    md
+    if (md.size > 0) Some(md) else None
   }
 
   private def save(resourceMap: ResourceMap, docName: String) {

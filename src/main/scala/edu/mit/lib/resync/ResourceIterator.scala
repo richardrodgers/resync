@@ -27,6 +27,7 @@ trait ResourceDescription {
   def mimetype: Option[String]
   def frequency: Option[Frequency]
   def priority: Option[Double]
+  def links: Seq[Link]
   def change: Option[String]
   def content: Option[InputStream]
 }
