@@ -1,13 +1,16 @@
 # ReSync - an OAI ResourceSync support library in Scala #
 
+![Build Status](https://travis-ci.org/richardrodgers/resync.svg?branch=master)]
+(https://travis-ci.org/richardrodgers/resync)
+
 Repo contains a library to facilitate:
 * construction of ResourceSync-compliant XML documents and files from sets of resource descriptions
 * parsing of ResourceSync documents into sets of resource descriptions
 
-It generally conforms to the '0.9.1' (beta) version of the ResourceSync Framework Specification.
-All of the mandatory data elements and attributes are provided, most all of the _recommended_ 
+It generally conforms to the '1.0' version of the ResourceSync Framework Specification.
+All of the mandatory data elements and attributes are provided, most all of the _recommended_
 are as well, and some of the _optional_ ones. A Java 7 VM is required, but nearly any recent
-version of scala (2.10+) should work. If built from source, the Gradle build tool is required.
+version of scala (2.11+) should work. If built from source, the Gradle build tool is required.
 
 ## Usage ##
 
@@ -18,11 +21,11 @@ NB: this section is subject to frequent change, API is not locked down.
 The library is used to create the various ResourceSync artifacts, which are or contain XML
 documents based on the Sitemap specification. When using it, the user must specify where
 these documents should be created. This parameter, known as the _document directory_,
-is the location in a filesystem where these artifact files are written. 
-The library makes the assumption that all relevent files are co-resident in this directory,
-or one of its sub-directories. For example, if a resource list file is created, 
+is the location in a filesystem where these artifact files are written.
+The library makes the assumption that all relevant files are co-resident in this directory,
+or one of its sub-directories. For example, if a resource list file is created,
 the library will look for (or create if absent) a capability file in the same directory.
-Needless to say, generated files may be _deployed_ to a variety of locations on a server 
+Needless to say, generated files may be _deployed_ to a variety of locations on a server
 without these locality constraints, since their relationships are ensured
 by URL links in the documents. The document directory will have a sub-directory for each
 'resource set' declared, with the sub-directory name equal to the resource set name.
@@ -36,7 +39,7 @@ index (if needed). Thus:
 
     http://www.example.com/rs/data1/resourcelist.xml
 
-has components: baseURL 'http://www.example.com/rs/', resource set name 'data1', capability 
+has components: baseURL 'http://www.example.com/rs/', resource set name 'data1', capability
 name 'resourcelist', etc. Note that actual resource URLs (those itemized in lists, dumps, etc)
 need not bear any relation to these URLs, but in the sample resource iterator (FileIterator),
 the base URL and resource set name are in fact used.
@@ -57,7 +60,7 @@ ResourceSync XML files in the document directory '/public/resync', we would code
     val builder = ResyncBuilder("/public/resync/", "http://example.com/")
     builder.list().resources(new FileIterator("/home/bob")).build()
 
-This invocation would create 3 files in /public/resyc, appropriately linked:
+This invocation would create 3 files in /public/resync, appropriately linked:
 
     resourcelist.xml
     capabilitylist.xml
@@ -73,19 +76,19 @@ Creating both at once is fine as well:
 
 If a resource iterator is capable of giving us changes, then we can make change lists:
 
-    builder.list().changes().resources(new FileIterator("/home/bob")).build()
+    builder.changes().resources(new FileIterator("/home/bob")).build()
 
 If one prefers the 'DSL' style of invocation:
 
-    val bobsFiles = FileIterator("home/bob")
-    builder list changes resources bobsFiles build
+    val bobsFiles = FileIterator("/home/bob")
+    builder changes resources bobsFiles build
 
 ### Other Iterators ###
 
 The project will contain other resource iterators intended for specific software platforms.
 One example (which may be bundled into the library using a compile switch) is an iterator for
 DSpace repositories. With it, one can create ResourceSync documents and files for DSpace
-collections or entire repositories. 
+collections or entire repositories.
 
 NB: the DSpace implementation is functional but incomplete.
 
@@ -122,7 +125,7 @@ To read an XML Resource List file:
 
 Since scala is a scripting language, you can use this library to script any ResourceSync operations,
 without having to compile or deploy any scala code (except, of course, any resource iterators you
-need to write). For example, suppose we want to (re)generate a resource list every week for 
+need to write). For example, suppose we want to (re)generate a resource list every week for
 the set of files in '/home/docs'. Simply create a text file (let's call it 'resync.scala')
 with the following content:
 
@@ -146,4 +149,3 @@ The library does not currently implement:
  * Capability List Indexes
  * Resource Dump Indexes
  * Change Dump Indexes
-
