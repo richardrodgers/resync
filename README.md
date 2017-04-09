@@ -1,7 +1,6 @@
 # ReSync - an OAI ResourceSync support library in Scala #
 
-![Build Status](https://travis-ci.org/richardrodgers/resync.svg?branch=master)]
-(https://travis-ci.org/richardrodgers/resync)
+[![Build Status](https://travis-ci.org/richardrodgers/resync.svg?branch=master)](https://travis-ci.org/richardrodgers/resync)
 
 Repo contains a library to facilitate:
 * construction of ResourceSync-compliant XML documents and files from sets of resource descriptions
